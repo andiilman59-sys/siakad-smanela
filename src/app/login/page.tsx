@@ -46,6 +46,12 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const supabase = createClient();
+      if (!supabase) {
+        // Mock mode - skip auth
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
       const { error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,

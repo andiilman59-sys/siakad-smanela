@@ -29,6 +29,10 @@ export function useUser() {
     async function fetchUser() {
       try {
         const supabase = createClient();
+        if (!supabase) {
+          setUser(MOCK_USER);
+          return;
+        }
         const {
           data: { user: supabaseUser },
         } = await supabase.auth.getUser();
