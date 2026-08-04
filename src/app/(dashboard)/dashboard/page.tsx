@@ -1,94 +1,93 @@
-"use client";
+"use client"
 
-import { useUser } from "@/hooks/use-user";
+import { useEffect, useState } from "react"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { getDashboardStats, getRecentActivity } from "@/lib/actions/dashboard"
 import {
   Users,
   GraduationCap,
   School,
   BookOpen,
   Calendar,
-  TrendingUp,
   ArrowUpRight,
   ClipboardCheck,
   FileText,
   Bell,
-} from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+} from "lucide-react"
+import type { Announcement, Notification } from "@/types/database"
 
-const statsCards = [
-  {
-    title: "Total Siswa",
-    value: "1,248",
-    change: "+12%",
-    icon: Users,
-    color: "bg-blue-500",
-  },
-  {
-    title: "Total Guru",
-    value: "72",
-    change: "+3%",
-    icon: GraduationCap,
-    color: "bg-green-500",
-  },
-  {
-    title: "Total Kelas",
-    value: "36",
-    change: "Stabil",
-    icon: School,
-    color: "bg-purple-500",
-  },
-  {
-    title: "Mata Pelajaran",
-    value: "24",
-    change: "+2",
-    icon: BookOpen,
-    color: "bg-orange-500",
-  },
-];
+interface DashboardStats {
+  totalSiswa: number
+  totalGuru: number
+  totalKelas: number
+  totalPengumuman: number
+}
 
 const quickActions = [
-  { title: "Presensi Hari Ini", icon: ClipboardCheck, href: "/dashboard/presensi" },
-  { title: "Jadwal Mengajar", icon: Calendar, href: "/dashboard/jadwal" },
-  { title: "Input Nilai", icon: FileText, href: "/dashboard/penilaian" },
-  { title: "Pengumuman", icon: Bell, href: "/dashboard/pengumuman" },
-];
-
-const barData = [
-  { name: "Jan", siswa: 40, guru: 24 },
-  { name: "Feb", siswa: 30, guru: 13 },
-  { name: "Mar", siswa: 20, guru: 98 },
-  { name: "Apr", siswa: 27, guru: 39 },
-  { name: "Mei", siswa: 18, guru: 48 },
-  { name: "Jun", siswa: 23, guru: 38 },
-];
-
-const pieData = [
-  { name: "Laki-laki", value: 624, color: "#3b82f6" },
-  { name: "Perempuan", value: 624, color: "#ec4899" },
-];
+  { title: "Presensi Hari Ini", icon: ClipboardCheck, href: "/presensi" },
+  { title: "Jadwal Mengajar", icon: Calendar, href: "/jadwal" },
+  { title: "Input Nilai", icon: FileText, href: "/penilaian" },
+  { title: "Pengumuman", icon: Bell, href: "/pengumuman" },
+]
 
 export default function DashboardPage() {
-  const { user, loading } = useUser();
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadData() {
+      const [statsResult, activityResult] = await Promise.all([
+        getDashboardStats(),
+        getRecentActivity(),
+      ])
+      if (statsResult.success && statsResult.data) {
+        setStats(statsResult.data)
+      }
+      if (activityResult.success && activityResult.data) {
+        setAnnouncements(activityResult.data.announcements)
+        setNotifications(activityResult.data.notifications)
+      }
+      setLoading(false)
+    }
+    loadData()
+  }, [])
+
+  const statCards = [
+    {
+      title: "Total Siswa",
+      value: stats?.totalSiswa ?? 0,
+      icon: Users,
+      color: "bg-blue-500",
+    },
+    {
+      title: "Total Guru",
+      value: stats?.totalGuru ?? 0,
+      icon: GraduationCap,
+      color: "bg-green-500",
+    },
+    {
+      title: "Total Kelas",
+      value: stats?.totalKelas ?? 0,
+      icon: School,
+      color: "bg-purple-500",
+    },
+    {
+      title: "Pengumuman Aktif",
+      value: stats?.totalPengumuman ?? 0,
+      icon: BookOpen,
+      color: "bg-orange-500",
+    },
+  ]
 
   if (loading) {
     return (
@@ -99,29 +98,22 @@ export default function DashboardPage() {
             <Skeleton key={i} className="h-32" />
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-        </div>
+        <Skeleton className="h-80" />
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-6">
-      {/* Welcome */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">
-          Selamat Datang, {user?.name}
-        </h2>
+        <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
         <p className="text-sm text-gray-500 mt-1">
           Berikut ringkasan data akademik hari ini.
         </p>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {statsCards.map((stat) => (
+        {statCards.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">
@@ -132,17 +124,12 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-                {stat.change} dari bulan lalu
-              </p>
+              <div className="text-2xl font-bold">{stat.value.toLocaleString("id-ID")}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Quick Actions */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Aksi Cepat</CardTitle>
@@ -170,54 +157,69 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Statistik Kehadiran</CardTitle>
-            <CardDescription>Data kehadiran siswa dan guru per bulan</CardDescription>
+            <CardTitle className="text-base">Pengumuman Terbaru</CardTitle>
+            <CardDescription>Pengumuman yang baru saja dipublikasikan</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" fontSize={12} tickLine={false} />
-                <YAxis fontSize={12} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="siswa" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="guru" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {announcements.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">Tidak ada pengumuman</p>
+            ) : (
+              <div className="space-y-3">
+                {announcements.map((a) => (
+                  <div key={a.id} className="border rounded-lg p-3">
+                    <div className="font-medium text-sm">{a.title}</div>
+                    <p className="text-xs text-gray-500 line-clamp-2 mt-1">{a.content}</p>
+                    <div className="text-xs text-gray-400 mt-2">
+                      {new Date(a.published_at).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Distribusi Gender</CardTitle>
-            <CardDescription>Perbandingan jumlah siswa laki-laki dan perempuan</CardDescription>
+            <CardTitle className="text-base">Notifikasi Terbaru</CardTitle>
+            <CardDescription>Notifikasi sistem terkini</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-center">
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          <CardContent>
+            {notifications.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">Tidak ada notifikasi</p>
+            ) : (
+              <div className="space-y-3">
+                {notifications.slice(0, 5).map((n) => (
+                  <div key={n.id} className="flex items-start gap-3 border rounded-lg p-3">
+                    <div
+                      className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
+                        n.type === "error"
+                          ? "bg-red-500"
+                          : n.type === "warning"
+                          ? "bg-yellow-500"
+                          : n.type === "success"
+                          ? "bg-green-500"
+                          : "bg-blue-500"
+                      }`}
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{n.title}</div>
+                      <p className="text-xs text-gray-500 line-clamp-1">{n.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
     </div>
-  );
+  )
 }

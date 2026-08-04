@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -27,69 +27,121 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/use-toast";
+import { getPresensi, savePresensi } from "@/lib/actions/presensi";
+import { getKelas } from "@/lib/actions/kelas";
+import type { Class, Student, Attendance, AttendanceStatus } from "@/types/database";
 import { Save, CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react";
 
-interface PresensiSiswa {
-  id: string;
-  nisn: string;
-  nama: string;
-  status: string;
-}
+const statusOptions: AttendanceStatus[] = ["hadir", "sakit", "izin", "alpa", "terlambat"];
 
-const siswaList: PresensiSiswa[] = [
-  { id: "1", nisn: "0051234001", nama: "Ahmad Rizki Pratama", status: "Hadir" },
-  { id: "2", nisn: "0051234002", nama: "Siti Nurhaliza", status: "Hadir" },
-  { id: "3", nisn: "0051234003", nama: "Budi Santoso", status: "Sakit" },
-  { id: "4", nisn: "0051234004", nama: "Dewi Anggraini", status: "Hadir" },
-  { id: "5", nisn: "0051234005", nama: "Farhan Maulana", status: "Izin" },
-  { id: "6", nisn: "0051234006", nama: "Gita Puspita Sari", status: "Hadir" },
-  { id: "7", nisn: "0051234007", nama: "Hendra Wijaya", status: "Alpa" },
-  { id: "8", nisn: "0051234008", nama: "Indah Permata", status: "Hadir" },
-  { id: "9", nisn: "0051234009", nama: "Joko Prasetyo", status: "Terlambat" },
-  { id: "10", nisn: "0051234010", nama: "Kartika Dewi Lestari", status: "Hadir" },
-];
-
-const statusOptions = ["Hadir", "Sakit", "Izin", "Alpa", "Terlambat"];
-
-const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
-  Hadir: { color: "bg-green-100 text-green-800 border-green-200", icon: <CheckCircle className="h-4 w-4" /> },
-  Sakit: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", icon: <AlertTriangle className="h-4 w-4" /> },
-  Izin: { color: "bg-blue-100 text-blue-800 border-blue-200", icon: <Clock className="h-4 w-4" /> },
-  Alpa: { color: "bg-red-100 text-red-800 border-red-200", icon: <XCircle className="h-4 w-4" /> },
-  Terlambat: { color: "bg-orange-100 text-orange-800 border-orange-200", icon: <Clock className="h-4 w-4" /> },
+const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  hadir: { label: "Hadir", color: "bg-green-100 text-green-800 border-green-200", icon: <CheckCircle className="h-4 w-4" /> },
+  sakit: { label: "Sakit", color: "bg-yellow-100 text-yellow-800 border-yellow-200", icon: <AlertTriangle className="h-4 w-4" /> },
+  izin: { label: "Izin", color: "bg-blue-100 text-blue-800 border-blue-200", icon: <Clock className="h-4 w-4" /> },
+  alpa: { label: "Alpa", color: "bg-red-100 text-red-800 border-red-200", icon: <XCircle className="h-4 w-4" /> },
+  terlambat: { label: "Terlambat", color: "bg-orange-100 text-orange-800 border-orange-200", icon: <Clock className="h-4 w-4" /> },
 };
 
-const kelasList = ["X-A", "X-B", "XI-A", "XI-B", "XII-A", "XII-B"];
+interface StudentWithAttendance {
+  student_id: string;
+  full_name: string;
+  nisn: string;
+  status: AttendanceStatus;
+  notes: string;
+}
 
 export default function PresensiPage() {
-  const [selectedKelas, setSelectedKelas] = useState("X-A");
+  const { toast } = useToast();
+  const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
-  const [presensi, setPresensi] = useState<PresensiSiswa[]>(siswaList);
-  const [saved, setSaved] = useState(false);
+  const [presensi, setPresensi] = useState<StudentWithAttendance[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [kelasList, setKelasList] = useState<Class[]>([]);
 
-  const updateStatus = (id: string, status: string) => {
+  const loadKelas = useCallback(async () => {
+    const result = await getKelas();
+    if (result.success && result.data) setKelasList(result.data);
+  }, []);
+
+  useEffect(() => {
+    loadKelas();
+  }, [loadKelas]);
+
+  const loadPresensi = useCallback(async () => {
+    if (!selectedClassId || !selectedDate) return;
+    setLoading(true);
+
+    const result = await getPresensi(selectedClassId, selectedDate);
+    if (result.success && result.data) {
+      const mapped: StudentWithAttendance[] = result.data.map((a) => ({
+        student_id: a.student_id,
+        full_name: a.student_id,
+        nisn: "",
+        status: a.status,
+        notes: a.notes || "",
+      }));
+      setPresensi(mapped);
+    } else {
+      setPresensi([]);
+    }
+    setLoading(false);
+  }, [selectedClassId, selectedDate]);
+
+  useEffect(() => {
+    if (selectedClassId && selectedDate) {
+      loadPresensi();
+    }
+  }, [selectedClassId, selectedDate, loadPresensi]);
+
+  const updateStatus = (studentId: string, status: AttendanceStatus) => {
     setPresensi((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status } : p))
+      prev.map((p) => (p.student_id === studentId ? { ...p, status } : p))
     );
-    setSaved(false);
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const updateNotes = (studentId: string, notes: string) => {
+    setPresensi((prev) =>
+      prev.map((p) => (p.student_id === studentId ? { ...p, notes } : p))
+    );
+  };
+
+  const handleSave = async () => {
+    if (!selectedClassId || !selectedDate || presensi.length === 0) return;
+    setSaving(true);
+
+    const records = presensi.map((p) => ({
+      student_id: p.student_id,
+      schedule_id: selectedClassId,
+      date: selectedDate,
+      status: p.status,
+      notes: p.notes,
+    }));
+
+    const result = await savePresensi(records);
+    if (result.success) {
+      toast({ title: "Berhasil", description: "Data presensi berhasil disimpan" });
+    } else {
+      toast({ title: "Gagal", description: result.error || "Gagal menyimpan presensi", variant: "destructive" });
+    }
+    setSaving(false);
   };
 
   const stats = {
-    hadir: presensi.filter((p) => p.status === "Hadir").length,
-    sakit: presensi.filter((p) => p.status === "Sakit").length,
-    izin: presensi.filter((p) => p.status === "Izin").length,
-    alpa: presensi.filter((p) => p.status === "Alpa").length,
-    terlambat: presensi.filter((p) => p.status === "Terlambat").length,
+    hadir: presensi.filter((p) => p.status === "hadir").length,
+    sakit: presensi.filter((p) => p.status === "sakit").length,
+    izin: presensi.filter((p) => p.status === "izin").length,
+    alpa: presensi.filter((p) => p.status === "alpa").length,
+    terlambat: presensi.filter((p) => p.status === "terlambat").length,
   };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   };
+
+  const selectedClassName = kelasList.find((k) => k.id === selectedClassId)?.name || "Pilih Kelas";
 
   return (
     <div className="space-y-6">
@@ -104,13 +156,13 @@ export default function PresensiPage() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="space-y-2">
               <Label>Kelas</Label>
-              <Select value={selectedKelas} onValueChange={setSelectedKelas}>
-                <SelectTrigger className="w-full sm:w-40">
+              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Pilih kelas" />
                 </SelectTrigger>
                 <SelectContent>
                   {kelasList.map((k) => (
-                    <SelectItem key={k} value={k}>{k}</SelectItem>
+                    <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -120,9 +172,9 @@ export default function PresensiPage() {
               <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full sm:w-52" />
             </div>
             <div className="flex items-end">
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} disabled={saving || !selectedClassId || presensi.length === 0}>
                 <Save className="h-4 w-4 mr-2" />
-                {saved ? "Tersimpan!" : "Simpan Presensi"}
+                {saving ? "Menyimpan..." : "Simpan Presensi"}
               </Button>
             </div>
           </div>
@@ -167,55 +219,80 @@ export default function PresensiPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Daftar Presensi - Kelas {selectedKelas}
+            Daftar Presensi - Kelas {selectedClassName}
           </CardTitle>
-          <CardDescription>{formatDate(selectedDate)}</CardDescription>
+          <CardDescription>{selectedDate ? formatDate(selectedDate) : "Pilih tanggal"}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">No</TableHead>
-                  <TableHead>NISN</TableHead>
-                  <TableHead>Nama Siswa</TableHead>
-                  <TableHead className="text-center">Status Kehadiran</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {presensi.map((siswa, idx) => {
-                  const config = statusConfig[siswa.status];
-                  return (
-                    <TableRow key={siswa.id}>
-                      <TableCell>{idx + 1}</TableCell>
-                      <TableCell className="font-mono text-sm">{siswa.nisn}</TableCell>
-                      <TableCell className="font-medium">{siswa.nama}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-center gap-2 flex-wrap">
-                          {statusOptions.map((status) => {
-                            const isActive = siswa.status === status;
-                            const cfg = statusConfig[status];
-                            return (
-                              <Button
-                                key={status}
-                                variant={isActive ? "default" : "outline"}
-                                size="sm"
-                                className={`${isActive ? cfg.color : ""} border`}
-                                onClick={() => updateStatus(siswa.id, status)}
-                              >
-                                {cfg.icon}
-                                <span className="ml-1">{status}</span>
-                              </Button>
-                            );
-                          })}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          {!selectedClassId ? (
+            <div className="text-center py-12 text-gray-500">
+              <CheckCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>Pilih kelas terlebih dahulu untuk mengisi presensi</p>
+            </div>
+          ) : loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : presensi.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <CheckCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>Tidak ada data presensi untuk tanggal ini</p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">No</TableHead>
+                    <TableHead>Nama Siswa</TableHead>
+                    <TableHead className="text-center">Status Kehadiran</TableHead>
+                    <TableHead className="w-48">Catatan</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {presensi.map((siswa, idx) => {
+                    const cfg = statusConfig[siswa.status];
+                    return (
+                      <TableRow key={siswa.student_id}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell className="font-medium">{siswa.full_name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-center gap-2 flex-wrap">
+                            {statusOptions.map((status) => {
+                              const isActive = siswa.status === status;
+                              const sCfg = statusConfig[status];
+                              return (
+                                <Button
+                                  key={status}
+                                  variant={isActive ? "default" : "outline"}
+                                  size="sm"
+                                  className={`${isActive ? sCfg.color : ""} border`}
+                                  onClick={() => updateStatus(siswa.student_id, status)}
+                                >
+                                  {sCfg.icon}
+                                  <span className="ml-1">{sCfg.label}</span>
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            placeholder="Catatan..."
+                            value={siswa.notes}
+                            onChange={(e) => updateNotes(siswa.student_id, e.target.value)}
+                            className="text-sm"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,16 +1,16 @@
-"use client";
+"use client"
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -18,14 +18,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -33,8 +33,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useToast } from "@/components/ui/use-toast"
+import { getKelasWithCounts, createKelas, updateKelas, deleteKelas } from "@/lib/actions/kelas"
+import { getTahunAjaran } from "@/lib/actions/tahun-ajaran"
+import type { AcademicYear } from "@/types/database"
 import {
   Plus,
   Pencil,
@@ -42,117 +47,148 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-} from "lucide-react";
+} from "lucide-react"
 
-interface Kelas {
-  id: string;
-  nama: string;
-  tingkat: string;
-  waliKelas: string;
-  tahunAjaran: string;
-  jumlahSiswa: number;
-  status: string;
+interface KelasWithCount {
+  id: string
+  academic_year_id: string
+  name: string
+  grade: number
+  major?: string
+  homeroom_teacher_id?: string
+  created_at: string
+  updated_at: string
+  student_count: number
 }
 
-const initialData: Kelas[] = [
-  { id: "1", nama: "X-A", tingkat: "10", waliKelas: "Drs. H. Ahmad Fauzi, M.Pd", tahunAjaran: "2025/2026", jumlahSiswa: 32, status: "Aktif" },
-  { id: "2", nama: "X-B", tingkat: "10", waliKelas: "Siti Aminah, S.Pd", tahunAjaran: "2025/2026", jumlahSiswa: 30, status: "Aktif" },
-  { id: "3", nama: "XI-A", tingkat: "11", waliKelas: "Budi Hartono, S.Kom", tahunAjaran: "2025/2026", jumlahSiswa: 31, status: "Aktif" },
-  { id: "4", nama: "XI-B", tingkat: "11", waliKelas: "Dewi Kartika, S.Pd", tahunAjaran: "2025/2026", jumlahSiswa: 29, status: "Aktif" },
-  { id: "5", nama: "XII-A", tingkat: "12", waliKelas: "Hendra Gunawan, S.Si", tahunAjaran: "2025/2026", jumlahSiswa: 28, status: "Aktif" },
-  { id: "6", nama: "XII-B", tingkat: "12", waliKelas: "Rina Susanti, S.Pd.I", tahunAjaran: "2025/2026", jumlahSiswa: 30, status: "Aktif" },
-  { id: "7", nama: "X-C", tingkat: "10", waliKelas: "Agus Setiawan, S.Pd", tahunAjaran: "2024/2025", jumlahSiswa: 0, status: "Nonaktif" },
-  { id: "8", nama: "XI-C", tingkat: "11", waliKelas: "Maya Sari, S.Pd", tahunAjaran: "2024/2025", jumlahSiswa: 0, status: "Nonaktif" },
-];
+const ITEMS_PER_PAGE = 10
 
-const emptyForm: Omit<Kelas, "id" | "jumlahSiswa"> = {
-  nama: "",
-  tingkat: "",
-  waliKelas: "",
-  tahunAjaran: "",
-  status: "Aktif",
-};
-
-const ITEMS_PER_PAGE = 7;
+const emptyForm = {
+  name: "",
+  grade: "",
+  academic_year_id: "",
+}
 
 export default function KelasPage() {
-  const [data, setData] = useState<Kelas[]>(initialData);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<Kelas | null>(null);
+  const { toast } = useToast()
+  const [data, setData] = useState<KelasWithCount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [deleteTarget, setDeleteTarget] = useState<KelasWithCount | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [tahunAjaranList, setTahunAjaranList] = useState<AcademicYear[]>([])
 
-  const guruList = [
-    "Drs. H. Ahmad Fauzi, M.Pd",
-    "Siti Aminah, S.Pd",
-    "Budi Hartono, S.Kom",
-    "Dewi Kartika, S.Pd",
-    "Hendra Gunawan, S.Si",
-    "Rina Susanti, S.Pd.I",
-    "Agus Setiawan, S.Pd",
-    "Maya Sari, S.Pd",
-  ];
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    const result = await getKelasWithCounts()
+    if (result.success && result.data) {
+      setData(result.data)
+    }
+    setLoading(false)
+  }, [])
+
+  const loadForeignData = useCallback(async () => {
+    const taResult = await getTahunAjaran()
+    if (taResult.success && taResult.data) setTahunAjaranList(taResult.data)
+  }, [])
+
+  useEffect(() => {
+    loadData()
+    loadForeignData()
+  }, [loadData, loadForeignData])
 
   const filtered = data.filter(
-    (d) =>
-      d.nama.toLowerCase().includes(search.toLowerCase()) ||
-      d.waliKelas.toLowerCase().includes(search.toLowerCase())
-  );
+    (d) => d.name.toLowerCase().includes(search.toLowerCase())
+  )
 
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
+  const paginated = filtered.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE
+  )
 
   const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!form.nama) errs.nama = "Nama kelas wajib diisi";
-    if (!form.tingkat) errs.tingkat = "Tingkat wajib dipilih";
-    if (!form.waliKelas) errs.waliKelas = "Wali kelas wajib dipilih";
-    if (!form.tahunAjaran) errs.tahunAjaran = "Tahun ajaran wajib dipilih";
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
+    const errs: Record<string, string> = {}
+    if (!form.name) errs.name = "Nama kelas wajib diisi"
+    if (!form.grade) errs.grade = "Tingkat wajib dipilih"
+    if (!form.academic_year_id) errs.academic_year_id = "Tahun ajaran wajib dipilih"
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
 
-  const handleSave = () => {
-    if (!validate()) return;
+  const handleSave = async () => {
+    if (!validate()) return
+    setSubmitting(true)
+
+    const payload = {
+      name: form.name,
+      grade: Number(form.grade),
+      academic_year_id: form.academic_year_id,
+    }
+
+    let result
     if (editingId) {
-      setData((prev) => prev.map((d) => (d.id === editingId ? { ...d, ...form } : d)));
+      result = await updateKelas(editingId, payload)
     } else {
-      setData((prev) => [...prev, { ...form, id: String(Date.now()), jumlahSiswa: 0 }]);
+      result = await createKelas(payload)
     }
-    setDialogOpen(false);
-    setForm(emptyForm);
-    setEditingId(null);
-  };
 
-  const handleEdit = (kelas: Kelas) => {
-    setForm({ nama: kelas.nama, tingkat: kelas.tingkat, waliKelas: kelas.waliKelas, tahunAjaran: kelas.tahunAjaran, status: kelas.status });
-    setEditingId(kelas.id);
-    setDialogOpen(true);
-  };
-
-  const handleDelete = () => {
-    if (deleteTarget) {
-      setData((prev) => prev.filter((d) => d.id !== deleteTarget.id));
-      setDeleteDialogOpen(false);
-      setDeleteTarget(null);
+    if (result.success) {
+      toast({ title: editingId ? "Berhasil" : "Berhasil", description: editingId ? "Data kelas berhasil diperbarui" : "Data kelas berhasil ditambahkan" })
+      setDialogOpen(false)
+      setForm(emptyForm)
+      setEditingId(null)
+      loadData()
+    } else {
+      toast({ title: "Gagal", description: result.error || "Terjadi kesalahan", variant: "destructive" })
     }
-  };
+    setSubmitting(false)
+  }
+
+  const handleEdit = (kelas: KelasWithCount) => {
+    setForm({
+      name: kelas.name,
+      grade: String(kelas.grade),
+      academic_year_id: kelas.academic_year_id,
+    })
+    setEditingId(kelas.id)
+    setDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setSubmitting(true)
+    const result = await deleteKelas(deleteTarget.id)
+    if (result.success) {
+      toast({ title: "Berhasil", description: "Data kelas berhasil dihapus" })
+      setDeleteDialogOpen(false)
+      setDeleteTarget(null)
+      loadData()
+    } else {
+      toast({ title: "Gagal", description: result.error || "Gagal menghapus data", variant: "destructive" })
+    }
+    setSubmitting(false)
+  }
 
   const openAdd = () => {
-    setForm(emptyForm);
-    setEditingId(null);
-    setErrors({});
-    setDialogOpen(true);
-  };
+    setForm(emptyForm)
+    setEditingId(null)
+    setErrors({})
+    setDialogOpen(true)
+  }
 
   const setField = (field: string, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
-  };
+    setForm((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }))
+  }
+
+  const gradeLabel: Record<number, string> = { 10: "X", 11: "XI", 12: "XII" }
 
   return (
     <div className="space-y-6">
@@ -171,7 +207,12 @@ export default function KelasPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Cari nama kelas..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-9 w-full sm:w-64" />
+                <Input
+                  placeholder="Cari nama kelas..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                  className="pl-9 w-full sm:w-64"
+                />
               </div>
               <Button onClick={openAdd}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -181,71 +222,80 @@ export default function KelasPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">No</TableHead>
-                  <TableHead>Nama Kelas</TableHead>
-                  <TableHead>Tingkat</TableHead>
-                  <TableHead>Wali Kelas</TableHead>
-                  <TableHead>Tahun Ajaran</TableHead>
-                  <TableHead className="text-center">Jumlah Siswa</TableHead>
-                  <TableHead className="text-center">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">Tidak ada data ditemukan</TableCell>
-                  </TableRow>
-                ) : (
-                  paginated.map((kelas, idx) => (
-                    <TableRow key={kelas.id}>
-                      <TableCell>{(page - 1) * ITEMS_PER_PAGE + idx + 1}</TableCell>
-                      <TableCell>
-                        <div className="font-medium">{kelas.nama}</div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">Tingkat {kelas.tingkat}</Badge>
-                      </TableCell>
-                      <TableCell>{kelas.waliKelas}</TableCell>
-                      <TableCell>{kelas.tahunAjaran}</TableCell>
-                      <TableCell className="text-center">{kelas.jumlahSiswa}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(kelas)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-600" onClick={() => { setDeleteTarget(kelas); setDeleteDialogOpen(true); }}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-sm text-gray-500">Halaman {page} dari {totalPages}</p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
             </div>
+          ) : (
+            <>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">No</TableHead>
+                      <TableHead>Nama Kelas</TableHead>
+                      <TableHead className="text-center">Tingkat</TableHead>
+                      <TableHead className="text-center">Jumlah Siswa</TableHead>
+                      <TableHead className="text-center">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginated.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                          Tidak ada data ditemukan
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginated.map((kelas, idx) => (
+                        <TableRow key={kelas.id}>
+                          <TableCell>{(page - 1) * ITEMS_PER_PAGE + idx + 1}</TableCell>
+                          <TableCell>
+                            <div className="font-medium">{kelas.name}</div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline">Tingkat {gradeLabel[kelas.grade] || kelas.grade}</Badge>
+                          </TableCell>
+                          <TableCell className="text-center">{kelas.student_count}</TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(kelas)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-600" onClick={() => { setDeleteTarget(kelas); setDeleteDialogOpen(true) }}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-gray-500">
+                    Halaman {page} dari {totalPages}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -255,12 +305,12 @@ export default function KelasPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
               <Label>Nama Kelas *</Label>
-              <Input value={form.nama} onChange={(e) => setField("nama", e.target.value)} placeholder="Contoh: X-A" />
-              {errors.nama && <p className="text-sm text-red-500">{errors.nama}</p>}
+              <Input value={form.name} onChange={(e) => setField("name", e.target.value)} placeholder="Contoh: X-A" />
+              {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
             </div>
             <div className="space-y-2">
               <Label>Tingkat *</Label>
-              <Select value={form.tingkat} onValueChange={(v) => setField("tingkat", v)}>
+              <Select value={form.grade} onValueChange={(v) => setField("grade", v)}>
                 <SelectTrigger><SelectValue placeholder="Pilih tingkat" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10 (X)</SelectItem>
@@ -268,55 +318,46 @@ export default function KelasPage() {
                   <SelectItem value="12">12 (XII)</SelectItem>
                 </SelectContent>
               </Select>
-              {errors.tingkat && <p className="text-sm text-red-500">{errors.tingkat}</p>}
+              {errors.grade && <p className="text-sm text-red-500">{errors.grade}</p>}
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label>Wali Kelas *</Label>
-              <Select value={form.waliKelas} onValueChange={(v) => setField("waliKelas", v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih wali kelas" /></SelectTrigger>
+              <Label>Tahun Ajaran *</Label>
+              <Select value={form.academic_year_id} onValueChange={(v) => setField("academic_year_id", v)}>
+                <SelectTrigger><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger>
                 <SelectContent>
-                  {guruList.map((g) => (
-                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  {tahunAjaranList.map((ta) => (
+                    <SelectItem key={ta.id} value={ta.id}>{ta.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.waliKelas && <p className="text-sm text-red-500">{errors.waliKelas}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label>Tahun Ajaran *</Label>
-              <Select value={form.tahunAjaran} onValueChange={(v) => setField("tahunAjaran", v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih tahun ajaran" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2025/2026">2025/2026</SelectItem>
-                  <SelectItem value="2024/2025">2024/2025</SelectItem>
-                  <SelectItem value="2023/2024">2023/2024</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.tahunAjaran && <p className="text-sm text-red-500">{errors.tahunAjaran}</p>}
+              {errors.academic_year_id && <p className="text-sm text-red-500">{errors.academic_year_id}</p>}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleSave}>{editingId ? "Simpan Perubahan" : "Tambah"}</Button>
+            <Button onClick={handleSave} disabled={submitting}>
+              {submitting ? "Menyimpan..." : editingId ? "Simpan Perubahan" : "Tambah"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Hapus Kelas</DialogTitle>
             <DialogDescription>
-              Apakah Anda yakin ingin menghapus kelas <strong>{deleteTarget?.nama}</strong>? Tindakan ini tidak dapat dibatalkan.
+              Apakah Anda yakin ingin menghapus kelas <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-            <Button variant="destructive" onClick={handleDelete}>Hapus</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
+              {submitting ? "Menghapus..." : "Hapus"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
+  )
 }

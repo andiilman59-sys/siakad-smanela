@@ -36,13 +36,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  Search,
-  AlertTriangle,
-} from "lucide-react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 
 interface Pelanggaran {
   id: string;
@@ -52,14 +46,6 @@ interface Pelanggaran {
   poin: number;
   deskripsi: string;
 }
-
-const initialData: Pelanggaran[] = [
-  { id: "1", tanggal: "2025-07-21", siswa: "Ahmad Rizki Pratama", kategori: "Keterlambatan", poin: 5, deskripsi: "Terlambat masuk sekolah 15 menit" },
-  { id: "2", tanggal: "2025-07-20", siswa: "Budi Santoso", kategori: "Tidak Mengerjakan PR", poin: 10, deskripsi: "Tidak mengerjakan tugas matematika" },
-  { id: "3", tanggal: "2025-07-19", siswa: "Farhan Maulana", kategori: "Bolos", poin: 25, deskripsi: "Tidak hadir tanpa keterangan selama 1 hari" },
-  { id: "4", tanggal: "2025-07-18", siswa: "Hendra Wijaya", kategori: "Pelanggaran Seragam", poin: 5, deskripsi: "Tidak menggunakan sepatu hitam sesuai ketentuan" },
-  { id: "5", tanggal: "2025-07-17", siswa: "Joko Prasetyo", kategori: "Tidak Mengerjakan PR", poin: 10, deskripsi: "Tidak membawa buku pelajaran bahasa Inggris" },
-];
 
 const kategoriList = ["Keterlambatan", "Bolos", "Tidak Mengerjakan PR", "Pelanggaran Seragam", "Merokok", "Bullying", "Kerusakan Fasilitas", "Lainnya"];
 const poinMap: Record<string, number> = {
@@ -72,13 +58,8 @@ const poinMap: Record<string, number> = {
   "Kerusakan Fasilitas": 15,
   "Lainnya": 5,
 };
-const siswaNamaList = [
-  "Ahmad Rizki Pratama", "Siti Nurhaliza", "Budi Santoso", "Dewi Anggraini",
-  "Farhan Maulana", "Gita Puspita Sari", "Hendra Wijaya", "Indah Permata",
-  "Joko Prasetyo", "Kartika Dewi Lestari",
-];
 
-const emptyForm: Omit<Pelanggaran, "id"> = {
+const emptyForm = {
   tanggal: new Date().toISOString().split("T")[0],
   siswa: "",
   kategori: "",
@@ -87,27 +68,17 @@ const emptyForm: Omit<Pelanggaran, "id"> = {
 };
 
 export default function KedisiplinanPage() {
-  const [data, setData] = useState<Pelanggaran[]>(initialData);
-  const [search, setSearch] = useState("");
+  const [data, setData] = useState<Pelanggaran[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<Pelanggaran | null>(null);
-
-  const filtered = data.filter(
-    (d) =>
-      d.siswa.toLowerCase().includes(search.toLowerCase()) ||
-      d.kategori.toLowerCase().includes(search.toLowerCase())
-  );
 
   const totalPoin = data.reduce((sum, d) => sum + d.poin, 0);
 
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.tanggal) errs.tanggal = "Tanggal wajib diisi";
-    if (!form.siswa) errs.siswa = "Siswa wajib dipilih";
+    if (!form.siswa) errs.siswa = "Nama siswa wajib diisi";
     if (!form.kategori) errs.kategori = "Kategori wajib dipilih";
     if (!form.deskripsi) errs.deskripsi = "Deskripsi wajib diisi";
     setErrors(errs);
@@ -117,34 +88,22 @@ export default function KedisiplinanPage() {
   const handleSave = () => {
     if (!validate()) return;
     const poin = poinMap[form.kategori] || 5;
-    const formData = { ...form, poin };
-    if (editingId) {
-      setData((prev) => prev.map((d) => (d.id === editingId ? { ...d, ...formData } : d)));
-    } else {
-      setData((prev) => [...prev, { ...formData, id: String(Date.now()) }]);
-    }
+    const newItem: Pelanggaran = {
+      ...form,
+      poin,
+      id: String(Date.now()),
+    };
+    setData((prev) => [...prev, newItem]);
     setDialogOpen(false);
     setForm(emptyForm);
-    setEditingId(null);
   };
 
-  const handleEdit = (item: Pelanggaran) => {
-    setForm({ tanggal: item.tanggal, siswa: item.siswa, kategori: item.kategori, poin: item.poin, deskripsi: item.deskripsi });
-    setEditingId(item.id);
-    setDialogOpen(true);
-  };
-
-  const handleDelete = () => {
-    if (deleteTarget) {
-      setData((prev) => prev.filter((d) => d.id !== deleteTarget.id));
-      setDeleteDialogOpen(false);
-      setDeleteTarget(null);
-    }
+  const handleDelete = (id: string) => {
+    setData((prev) => prev.filter((d) => d.id !== id));
   };
 
   const openAdd = () => {
     setForm(emptyForm);
-    setEditingId(null);
     setErrors({});
     setDialogOpen(true);
   };
@@ -205,39 +164,38 @@ export default function KedisiplinanPage() {
               <CardTitle className="text-base">Daftar Pelanggaran</CardTitle>
               <CardDescription>Riwayat pelanggaran kedisiplinan siswa</CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input placeholder="Cari siswa atau kategori..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 w-full sm:w-64" />
-              </div>
-              <Button onClick={openAdd}>
+            <Button onClick={openAdd}>
+              <Plus className="h-4 w-4 mr-2" />
+              Tambah Pelanggaran
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {data.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>Belum ada data pelanggaran</p>
+              <Button variant="outline" className="mt-4" onClick={openAdd}>
                 <Plus className="h-4 w-4 mr-2" />
                 Tambah Pelanggaran
               </Button>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">No</TableHead>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Siswa</TableHead>
-                  <TableHead>Kategori</TableHead>
-                  <TableHead className="text-center">Poin</TableHead>
-                  <TableHead>Deskripsi</TableHead>
-                  <TableHead className="text-center">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">Tidak ada data ditemukan</TableCell>
+                    <TableHead className="w-12">No</TableHead>
+                    <TableHead>Tanggal</TableHead>
+                    <TableHead>Siswa</TableHead>
+                    <TableHead>Kategori</TableHead>
+                    <TableHead className="text-center">Poin</TableHead>
+                    <TableHead>Deskripsi</TableHead>
+                    <TableHead className="text-center">Aksi</TableHead>
                   </TableRow>
-                ) : (
-                  filtered.map((item, idx) => (
+                </TableHeader>
+                <TableBody>
+                  {data.map((item, idx) => (
                     <TableRow key={item.id}>
                       <TableCell>{idx + 1}</TableCell>
                       <TableCell className="text-sm">{formatDate(item.tanggal)}</TableCell>
@@ -253,30 +211,25 @@ export default function KedisiplinanPage() {
                       </TableCell>
                       <TableCell className="text-sm text-gray-600 max-w-[200px] truncate">{item.deskripsi}</TableCell>
                       <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(item)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-600" onClick={() => { setDeleteTarget(item); setDeleteDialogOpen(true); }}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-600" onClick={() => handleDelete(item.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Pelanggaran" : "Tambah Pelanggaran"}</DialogTitle>
-            <DialogDescription>{editingId ? "Ubah data pelanggaran" : "Catat pelanggaran siswa baru"}</DialogDescription>
+            <DialogTitle>Tambah Pelanggaran</DialogTitle>
+            <DialogDescription>Catat pelanggaran siswa baru</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
@@ -285,13 +238,8 @@ export default function KedisiplinanPage() {
               {errors.tanggal && <p className="text-sm text-red-500">{errors.tanggal}</p>}
             </div>
             <div className="space-y-2">
-              <Label>Siswa *</Label>
-              <Select value={form.siswa} onValueChange={(v) => setField("siswa", v)}>
-                <SelectTrigger><SelectValue placeholder="Pilih siswa" /></SelectTrigger>
-                <SelectContent>
-                  {siswaNamaList.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Nama Siswa *</Label>
+              <Input value={form.siswa} onChange={(e) => setField("siswa", e.target.value)} placeholder="Nama siswa" />
               {errors.siswa && <p className="text-sm text-red-500">{errors.siswa}</p>}
             </div>
             <div className="space-y-2">
@@ -316,21 +264,7 @@ export default function KedisiplinanPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleSave}>{editingId ? "Simpan Perubahan" : "Tambah"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Hapus Pelanggaran</DialogTitle>
-            <DialogDescription>Apakah Anda yakin ingin menghapus data pelanggaran ini?</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-            <Button variant="destructive" onClick={handleDelete}>Hapus</Button>
+            <Button onClick={handleSave}>Tambah</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
